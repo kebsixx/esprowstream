@@ -231,22 +231,106 @@ export default function Home() {
   // ── Not connected ───────────────────────────────────────────────
   if (!isConnected) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-8 bg-[#050507] bg-mesh text-white">
-        <div className="text-center">
-          <h1 className="gradient-text text-5xl font-bold tracking-tight sm:text-6xl">
+      <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-[#050507] text-white">
+        {/* Animated background orbs */}
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div className="absolute -left-32 -top-32 h-96 w-96 animate-[pulse_8s_ease-in-out_infinite] rounded-full bg-indigo-600/[0.07] blur-3xl" />
+          <div className="absolute -right-32 top-1/3 h-80 w-80 animate-[pulse_10s_ease-in-out_infinite_2s] rounded-full bg-purple-600/6 blur-3xl" />
+          <div className="absolute -bottom-24 left-1/3 h-72 w-72 animate-[pulse_12s_ease-in-out_infinite_4s] rounded-full bg-pink-600/5 blur-3xl" />
+        </div>
+
+        {/* Grid lines overlay */}
+        <div
+          className="pointer-events-none absolute inset-0 opacity-[0.03]"
+          style={{
+            backgroundImage:
+              "linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)",
+            backgroundSize: "60px 60px",
+          }}
+        />
+
+        {/* Content */}
+        <div className="relative z-10 mx-auto max-w-2xl px-6 text-center">
+          {/* Logo mark */}
+          <div className="mx-auto mb-8 flex h-16 w-16 items-center justify-center rounded-2xl bg-linear-to-br from-indigo-500 to-purple-600 shadow-lg shadow-indigo-500/25">
+            <svg
+              className="h-8 w-8 text-white"
+              fill="currentColor"
+              viewBox="0 0 24 24">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+          </div>
+
+          {/* Title */}
+          <h1 className="gradient-text text-5xl font-bold tracking-tight sm:text-7xl">
             EsprowStream
           </h1>
-          <p className="mt-3 text-lg text-zinc-500">
-            Decentralized pay-per-minute video streaming
+          <p className="mx-auto mt-4 max-w-md text-base leading-relaxed text-zinc-400 sm:text-lg">
+            Decentralized pay-per-minute video streaming powered by smart
+            contract escrow
           </p>
+
+          {/* CTA */}
+          <div className="mt-10">
+            <WalletButton centered />
+          </div>
+
+          {/* Feature pills */}
+          <div className="mt-12 flex flex-wrap justify-center gap-3">
+            {[
+              { icon: "🔒", label: "Non-custodial" },
+              { icon: "⚡", label: "Pay-per-minute" },
+              { icon: "💎", label: "USDC Escrow" },
+            ].map((f) => (
+              <div
+                key={f.label}
+                className="glass-card flex items-center gap-2 rounded-full px-4 py-2 text-sm text-zinc-400">
+                <span>{f.icon}</span>
+                <span>{f.label}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* How it works */}
+          <div className="mt-16 grid grid-cols-1 gap-4 sm:grid-cols-3">
+            {[
+              {
+                step: "01",
+                title: "Deposit",
+                desc: "Fund your escrow with USDC",
+              },
+              {
+                step: "02",
+                title: "Stream",
+                desc: "Watch content in real-time",
+              },
+              {
+                step: "03",
+                title: "Settle",
+                desc: "Pay only for what you watched",
+              },
+            ].map((s) => (
+              <div
+                key={s.step}
+                className="glass-card glass-card-hover rounded-2xl p-5 text-left transition-all">
+                <span className="font-mono text-xs text-indigo-400">
+                  {s.step}
+                </span>
+                <h3 className="mt-2 text-sm font-semibold text-zinc-200">
+                  {s.title}
+                </h3>
+                <p className="mt-1 text-xs leading-relaxed text-zinc-500">
+                  {s.desc}
+                </p>
+              </div>
+            ))}
+          </div>
         </div>
-        <WalletButton />
-        <div className="mt-8 flex gap-6 text-xs text-zinc-600">
-          <span>Sepolia Testnet</span>
-          <span>•</span>
-          <span>USDC Escrow</span>
-          <span>•</span>
-          <span>Non-custodial</span>
+
+        {/* Footer */}
+        <div className="absolute bottom-6 flex items-center gap-2 text-[11px] text-zinc-600">
+          <div className="h-1.5 w-1.5 rounded-full bg-green-500/60" />
+          Sepolia Testnet
         </div>
       </div>
     );

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useAccount, useConnect, useDisconnect } from "wagmi";
 
-export function WalletButton() {
+export function WalletButton({ centered }: { centered?: boolean }) {
   const { address, isConnected } = useAccount();
   const { connect, connectors, error: connectError } = useConnect();
   const { disconnect } = useDisconnect();
@@ -28,8 +28,12 @@ export function WalletButton() {
         c.id === "io.metamask" || c.name.toLowerCase().includes("metamask"),
     );
 
+    const containerClass = centered
+      ? "flex flex-col items-center gap-3"
+      : "flex flex-col items-end gap-1";
+
     return (
-      <div className="flex flex-col items-end gap-1">
+      <div className={containerClass}>
         <button
           onClick={() => {
             if (metaMask) {
