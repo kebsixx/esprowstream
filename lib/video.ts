@@ -5,20 +5,9 @@ export interface VideoConfig {
   cid: string;
 }
 
-export const VIDEO_LIBRARY: VideoConfig[] = [
-  {
-    id: 1,
-    title: "Cinematic Bergema Sampai Selamanya",
-    description: "Cinematic visual spotify song Bergema Sampai Selamanya.",
-    cid: "bafybeiee7yyo5wgunjxk4lzil67byig62uvvi62egjkctt2jxb56aeggie",
-  },
-  {
-    id: 2,
-    title: "Cinematic Video on Ramadhan",
-    description: "Cinematic video capturing the essence of Ramadhan.",
-    cid: "bafybeihime6btoqf6dpmhzbtsu4hq3axpiuh3xibiw4tzegj5lhmqf24qm",
-  },
-];
+export const VIDEO_LIBRARY: VideoConfig[] = JSON.parse(
+  process.env.NEXT_PUBLIC_VIDEO_LIBRARY!,
+);
 
 const DEFAULT_VIDEO = VIDEO_LIBRARY[0];
 

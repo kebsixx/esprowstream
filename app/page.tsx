@@ -1,6 +1,7 @@
 "use client";
 
 import { waitForTransactionReceipt } from "@wagmi/core";
+import Image from "next/image";
 import { ChangeEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useAccount, useWriteContract } from "wagmi";
 import { OwnerPanel } from "../components/OwnerPanel";
@@ -27,11 +28,17 @@ import {
 } from "../lib/contracts";
 import { VIDEO_LIBRARY, getVideoById } from "../lib/video";
 
-type TxType = "approve" | "deposit" | "start" | "end" | null;
+type TxType = "approve" | "deposit" | "withdraw" | "start" | "end" | null;
 
-const SESSION_MINUTES_MIN = 0;
-const SESSION_MINUTES_MAX = 180;
-const SESSION_MINUTES_STEP = 1;
+const SESSION_MINUTES_MIN = Number(
+  process.env.NEXT_PUBLIC_SESSION_MINUTES_MIN!,
+);
+const SESSION_MINUTES_MAX = Number(
+  process.env.NEXT_PUBLIC_SESSION_MINUTES_MAX!,
+);
+const SESSION_MINUTES_STEP = Number(
+  process.env.NEXT_PUBLIC_SESSION_MINUTES_STEP!,
+);
 
 export default function Home() {
   const { isConnected, address } = useAccount();
@@ -55,6 +62,7 @@ export default function Home() {
   const [showDebug, setShowDebug] = useState(false);
   const [sessionMinutes, setSessionMinutes] = useState(60);
   const [selectedVideoId, setSelectedVideoId] = useState(VIDEO_LIBRARY[0].id);
+  const [withdrawAmount, setWithdrawAmount] = useState("");
 
   const { data: videoPriceData } = useVideoPrice(BigInt(selectedVideoId));
 
@@ -205,6 +213,43 @@ export default function Home() {
     }
   }, [writeContractAsync, refetchBalance, refetchAllowance]);
 
+  const handleWithdraw = useCallback(async () => {
+    try {
+      setError(null);
+      const amountToWithdraw = withdrawAmount.trim();
+      if (!amountToWithdraw || Number(amountToWithdraw) <= 0) {
+        setError("Please enter a valid amount to withdraw.");
+        return;
+      }
+      const amountInWei = BigInt(
+        Math.floor(Number(amountToWithdraw) * 1_000_000),
+      );
+      if (escrowBalance === undefined || amountInWei > escrowBalance) {
+        setError("Insufficient escrow balance.");
+        return;
+      }
+      setTxLoading("withdraw");
+      const hash = await writeContractAsync({
+        address: ESCROW_ADDRESS as `0x${string}`,
+        abi: ESCROW_ABI,
+        functionName: "withdraw",
+        args: [amountInWei],
+        gas: BigInt(200_000),
+      });
+      await waitForTransactionReceipt(config, { hash });
+      await refetchBalance();
+      setWithdrawAmount("");
+    } catch (err: unknown) {
+      const msg =
+        (err as { shortMessage?: string }).shortMessage ||
+        (err as Error).message ||
+        "Withdraw failed";
+      setError(msg);
+    } finally {
+      setTxLoading(null);
+    }
+  }, [writeContractAsync, refetchBalance, withdrawAmount, escrowBalance]);
+
   const handleStartSession = useCallback(async () => {
     try {
       setError(null);
@@ -346,13 +391,15 @@ export default function Home() {
         {/* Content */}
         <div className="relative z-10 mx-auto max-w-2xl px-6 text-center">
           {/* Logo mark */}
-          <div className="mx-auto mb-8 flex h-16 w-16 items-center justify-center rounded-2xl bg-linear-to-br from-indigo-500 to-purple-600 shadow-lg shadow-indigo-500/25">
-            <svg
-              className="h-8 w-8 text-white"
-              fill="currentColor"
-              viewBox="0 0 24 24">
-              <path d="M8 5v14l11-7z" />
-            </svg>
+          <div className="mx-auto flex items-center justify-center">
+            <Image
+              src="/img/logo.png"
+              alt="EsprowStream logo"
+              width={100}
+              height={100}
+              className="h-40 w-auto object-contain"
+              priority
+            />
           </div>
 
           {/* Title */}
@@ -442,8 +489,16 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-[#050507] bg-mesh text-white">
       {/* ── Header ─────────────────────────────────────────────── */}
-      <header className="glass-card sticky top-0 z-50 flex items-center justify-between px-6 py-3">
+      <header className="glass-card sticky top-0 z-50 flex items-center justify-between px-5 py-2">
         <div className="flex items-center gap-3">
+          <Image
+            src="/img/logo.png"
+            alt="EsprowStream logo"
+            width={40}
+            height={40}
+            className="h-15 w-auto object-contain"
+            priority
+          />
           <h1 className="gradient-text text-lg font-bold tracking-tight">
             EsprowStream
           </h1>
@@ -711,6 +766,65 @@ export default function Home() {
                   </>
                 )}
               </button>
+
+              {/* Withdraw Section */}
+              <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                <label className="mb-2 block text-[10px] font-semibold uppercase tracking-widest text-zinc-400">
+                  Withdraw USDC
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    value={withdrawAmount}
+                    onChange={(e) => setWithdrawAmount(e.target.value)}
+                    placeholder="Amount"
+                    disabled={txLoading !== null || isActive}
+                    className="no-spinner flex-1 rounded-lg border border-white/10 bg-transparent px-3 py-2 text-sm text-white placeholder-zinc-500 focus:border-indigo-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40"
+                  />
+                  <button
+                    onClick={() => setWithdrawAmount(formattedBalance)}
+                    disabled={
+                      txLoading !== null ||
+                      isActive ||
+                      escrowBalance === undefined ||
+                      escrowBalance === 0n
+                    }
+                    className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-zinc-300 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40">
+                    Max
+                  </button>
+                </div>
+                <button
+                  onClick={handleWithdraw}
+                  disabled={txLoading !== null || !withdrawAmount || isActive}
+                  className="btn-primary mt-2 flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:transform-none disabled:shadow-none">
+                  {txLoading === "withdraw" ? (
+                    <span className="animate-pulse-slow">Withdrawing…</span>
+                  ) : (
+                    <>
+                      <svg
+                        className="h-4 w-4"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={2}>
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"
+                        />
+                      </svg>
+                      Withdraw
+                    </>
+                  )}
+                </button>
+                {isActive && (
+                  <p className="mt-2 text-[11px] text-amber-400">
+                    End session before withdrawing
+                  </p>
+                )}
+              </div>
 
               {!isActive ? (
                 <div className="space-y-2">

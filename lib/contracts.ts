@@ -1,5 +1,5 @@
-export const ESCROW_ADDRESS = "0xda783A871e61f03c491805f37dE05dEfEb0EBB75";
-export const USDC_ADDRESS = "0xeAB8F778B51859a90bda2A0702ec134c6437C247";
+export const ESCROW_ADDRESS = process.env.NEXT_PUBLIC_ESCROW_ADDRESS!;
+export const USDC_ADDRESS = process.env.NEXT_PUBLIC_USDC_ADDRESS!;
 
 export const ESCROW_ABI = [
   {

@@ -7,7 +7,7 @@ import {
 } from "../lib/contracts";
 
 // 1 USDC = 1_000_000 (6 decimals)
-export const DEPOSIT_AMOUNT = BigInt(1_000_000);
+export const DEPOSIT_AMOUNT = BigInt(process.env.NEXT_PUBLIC_DEPOSIT_AMOUNT!);
 
 // Poll interval for realtime updates (in ms)
 const POLL_INTERVAL = 4_000;
