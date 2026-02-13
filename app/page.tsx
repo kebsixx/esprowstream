@@ -1,7 +1,7 @@
 "use client";
 
 import { waitForTransactionReceipt } from "@wagmi/core";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { ChangeEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useAccount, useWriteContract } from "wagmi";
 import { OwnerPanel } from "../components/OwnerPanel";
 import { VideoPlayer } from "../components/VideoPlayer";
@@ -16,6 +16,7 @@ import {
   useEscrowOwner,
   useSession,
   useUsdcWalletBalance,
+  useVideoPrice,
 } from "../hooks/useStreamingSession";
 import { config } from "../lib/config";
 import {
@@ -24,8 +25,13 @@ import {
   USDC_ABI,
   USDC_ADDRESS,
 } from "../lib/contracts";
+import { VIDEO_LIBRARY, getVideoById } from "../lib/video";
 
 type TxType = "approve" | "deposit" | "start" | "end" | null;
+
+const SESSION_MINUTES_MIN = 0;
+const SESSION_MINUTES_MAX = 180;
+const SESSION_MINUTES_STEP = 1;
 
 export default function Home() {
   const { isConnected, address } = useAccount();
@@ -47,8 +53,15 @@ export default function Home() {
   const [mounted, setMounted] = useState(false);
   const [devClicks, setDevClicks] = useState(0);
   const [showDebug, setShowDebug] = useState(false);
+  const [sessionMinutes, setSessionMinutes] = useState(60);
+  const [selectedVideoId, setSelectedVideoId] = useState(VIDEO_LIBRARY[0].id);
+
+  const { data: videoPriceData } = useVideoPrice(BigInt(selectedVideoId));
 
   useEffect(() => setMounted(true), []);
+
+  // Track metadata for the currently selected video
+  const selectedVideo = getVideoById(selectedVideoId);
 
   // ── Derived data ────────────────────────────────────────────────
   const session = parseSessionData(sessionRaw);
@@ -68,6 +81,77 @@ export default function Home() {
     !!address &&
     !!onChainOwner &&
     address.toLowerCase() === onChainOwner.toLowerCase();
+  const blockedByOtherSession =
+    isActive &&
+    session !== undefined &&
+    session.videoId !== BigInt(selectedVideoId);
+  const secondsPerInterval = interval || 300;
+  const pricePerInterval = (videoPriceData as bigint | undefined) ?? 0n;
+  const hasRate = videoPriceData !== undefined && pricePerInterval > 0n;
+  const affordableIntervals =
+    hasRate && escrowBalance !== undefined
+      ? Number(escrowBalance / pricePerInterval)
+      : 0;
+  const maxMinutesByBalance = Math.floor(
+    (affordableIntervals * secondsPerInterval) / 60,
+  );
+  const maxSelectableMinutes = Math.min(
+    SESSION_MINUTES_MAX,
+    Math.max(SESSION_MINUTES_MIN, maxMinutesByBalance),
+  );
+  const targetIntervals =
+    sessionMinutes <= 0
+      ? 0
+      : Math.ceil((sessionMinutes * 60) / secondsPerInterval);
+  const committedMinutes = (targetIntervals * secondsPerInterval) / 60;
+  const rateLabel =
+    videoPriceData !== undefined && pricePerInterval > 0n
+      ? formatUSDC(pricePerInterval)
+      : "—";
+  const sessionCost =
+    pricePerInterval > 0n && targetIntervals > 0
+      ? formatUSDC(pricePerInterval * BigInt(targetIntervals))
+      : "—";
+  const balanceCoverageMessage = hasRate
+    ? `Balance covers up to ${affordableIntervals} interval${
+        affordableIntervals === 1 ? "" : "s"
+      } (~${maxMinutesByBalance} minutes).`
+    : "Rate data is loading...";
+  const startHint =
+    affordableIntervals === 0
+      ? "Deposit USDC to cover at least one interval."
+      : targetIntervals === 0
+        ? "Increase minutes to start streaming."
+        : null;
+  const startDisabled =
+    txLoading !== null ||
+    blockedByOtherSession ||
+    targetIntervals === 0 ||
+    affordableIntervals === 0 ||
+    targetIntervals > affordableIntervals;
+
+  const clampToSelectableMinutes = useCallback(
+    (value: number) =>
+      Math.max(SESSION_MINUTES_MIN, Math.min(maxSelectableMinutes, value)),
+    [maxSelectableMinutes],
+  );
+
+  useEffect(() => {
+    setSessionMinutes((prev) => {
+      const clamped = clampToSelectableMinutes(prev);
+      return clamped === prev ? prev : clamped;
+    });
+  }, [clampToSelectableMinutes]);
+
+  const handleMinutesChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const parsed = Number(event.target.value);
+    if (Number.isNaN(parsed)) return;
+    setSessionMinutes(clampToSelectableMinutes(parsed));
+  };
+
+  const handleAdjustMinutes = (delta: number) => {
+    setSessionMinutes((prev) => clampToSelectableMinutes(prev + delta));
+  };
 
   const endSessionRef = useRef<() => void>(() => {});
   const autoEndTriggered = useRef(false);
@@ -124,12 +208,16 @@ export default function Home() {
   const handleStartSession = useCallback(async () => {
     try {
       setError(null);
+      if (targetIntervals === 0 || affordableIntervals === 0) {
+        setError("Insufficient balance or duration set to zero.");
+        return;
+      }
       setTxLoading("start");
       const hash = await writeContractAsync({
         address: ESCROW_ADDRESS as `0x${string}`,
         abi: ESCROW_ABI,
         functionName: "startSession",
-        args: [BigInt(1), BigInt(12)],
+        args: [BigInt(selectedVideoId), BigInt(targetIntervals)],
         gas: BigInt(300_000),
       });
       await waitForTransactionReceipt(config, { hash });
@@ -143,7 +231,13 @@ export default function Home() {
     } finally {
       setTxLoading(null);
     }
-  }, [writeContractAsync, refetchSession]);
+  }, [
+    writeContractAsync,
+    refetchSession,
+    selectedVideoId,
+    targetIntervals,
+    affordableIntervals,
+  ]);
 
   const handleEndSession = useCallback(async () => {
     try {
@@ -365,7 +459,39 @@ export default function Home() {
         {/* ── LEFT: Video + Session Info ────────────────────────── */}
         <div className="space-y-5">
           {/* Video Player */}
-          <VideoPlayer isActive={isActive} />
+          <VideoPlayer isActive={isActive} video={selectedVideo} />
+
+          <div className="glass-card rounded-2xl p-5">
+            <div className="mb-4 flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-widest text-zinc-400">
+                Choose video
+              </p>
+              <span className="text-[10px] text-zinc-500">
+                #{selectedVideoId}
+              </span>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {VIDEO_LIBRARY.map((video) => {
+                const isSelected = video.id === selectedVideoId;
+                return (
+                  <button
+                    key={video.id}
+                    onClick={() => setSelectedVideoId(video.id)}
+                    className={`flex h-full flex-col gap-2 rounded-2xl border px-4 py-3 text-left transition-all focus:outline-none ${
+                      isSelected
+                        ? "border-indigo-500 bg-white/10"
+                        : "border-white/5 bg-white/5"
+                    }`}>
+                    <p className="font-semibold text-white">{video.title}</p>
+                    <p className="text-xs text-zinc-500">{video.description}</p>
+                    <span className="text-[11px] text-zinc-400">
+                      Video ID {video.id}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
           {/* Progress bar (only when active) */}
           {isActive && (
@@ -492,6 +618,64 @@ export default function Home() {
             <h3 className="mb-4 text-xs font-medium uppercase tracking-widest text-zinc-500">
               Actions
             </h3>
+            <div className="mb-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-zinc-300">
+              <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-widest text-zinc-400">
+                <span>Session Length</span>
+                <span>{targetIntervals} intervals</span>
+              </div>
+              <div className="mt-2 flex items-center justify-between text-[9px] font-semibold uppercase tracking-[0.3em] text-zinc-500">
+                <span>Rate per interval</span>
+                <span className="font-mono text-xs text-zinc-200">
+                  {rateLabel !== "—" ? `${rateLabel} USDC` : "—"}
+                </span>
+              </div>
+              <div className="mt-3 flex items-center gap-3">
+                <div className="flex overflow-hidden rounded-2xl border border-white/10 bg-white/5">
+                  <button
+                    type="button"
+                    onClick={() => handleAdjustMinutes(-SESSION_MINUTES_STEP)}
+                    disabled={sessionMinutes <= SESSION_MINUTES_MIN}
+                    className="h-11 w-11 border-r border-white/10 bg-black/30 text-lg font-semibold text-zinc-200 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:text-zinc-500"
+                    aria-label="Decrease session minutes">
+                    -
+                  </button>
+                  <input
+                    type="number"
+                    min={SESSION_MINUTES_MIN}
+                    max={SESSION_MINUTES_MAX}
+                    step={SESSION_MINUTES_STEP}
+                    value={sessionMinutes}
+                    onChange={handleMinutesChange}
+                    inputMode="numeric"
+                    className="h-11 w-16 appearance-none border-none bg-transparent px-3 text-center font-mono text-xl text-white focus:outline-none no-spinner"
+                    aria-label="Session minutes"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleAdjustMinutes(SESSION_MINUTES_STEP)}
+                    disabled={sessionMinutes >= SESSION_MINUTES_MAX}
+                    className="h-11 w-11 border-l border-white/10 bg-black/30 text-lg font-semibold text-zinc-200 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:text-zinc-500"
+                    aria-label="Increase session minutes">
+                    +
+                  </button>
+                </div>
+                <span className="text-xs font-medium uppercase tracking-[0.2em] text-zinc-500">
+                  minutes
+                </span>
+              </div>
+              <p className="mt-2 text-[11px] text-zinc-500">
+                Commits ~{committedMinutes.toFixed(1)} minutes (
+                {targetIntervals} intervals)
+              </p>
+              <p className="text-[11px] text-zinc-400">
+                {balanceCoverageMessage}
+              </p>
+              <p className="text-[11px] text-zinc-400">
+                {sessionCost !== "—"
+                  ? `Estimated spend ~${sessionCost} USDC`
+                  : "Rate data pending..."}
+              </p>
+            </div>
             <div className="flex flex-col gap-3">
               {/* Step indicators */}
               {needsApproval && (
@@ -529,24 +713,35 @@ export default function Home() {
               </button>
 
               {!isActive ? (
-                <button
-                  onClick={handleStartSession}
-                  disabled={txLoading !== null}
-                  className="btn-success flex w-full items-center justify-center gap-2 rounded-xl px-5 py-3.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:transform-none disabled:shadow-none">
-                  {txLoading === "start" ? (
-                    <span className="animate-pulse-slow">Starting…</span>
-                  ) : (
-                    <>
-                      <svg
-                        className="h-4 w-4"
-                        fill="currentColor"
-                        viewBox="0 0 24 24">
-                        <path d="M8 5v14l11-7z" />
-                      </svg>
-                      Start Session
-                    </>
+                <div className="space-y-2">
+                  <button
+                    onClick={handleStartSession}
+                    disabled={startDisabled}
+                    className="btn-success flex w-full items-center justify-center gap-2 rounded-xl px-5 py-3.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:transform-none disabled:shadow-none">
+                    {txLoading === "start" ? (
+                      <span className="animate-pulse-slow">Starting…</span>
+                    ) : (
+                      <>
+                        <svg
+                          className="h-4 w-4"
+                          fill="currentColor"
+                          viewBox="0 0 24 24">
+                          <path d="M8 5v14l11-7z" />
+                        </svg>
+                        Start Session
+                      </>
+                    )}
+                  </button>
+                  {startDisabled && startHint && (
+                    <p className="text-[11px] text-rose-400">{startHint}</p>
                   )}
-                </button>
+                  {blockedByOtherSession && session && (
+                    <p className="text-xs text-red-400">
+                      A session for #{session.videoId.toString()} is active—end
+                      it before switching videos.
+                    </p>
+                  )}
+                </div>
               ) : (
                 <button
                   onClick={handleEndSession}

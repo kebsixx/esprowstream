@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { getVideoUrl } from "../lib/video";
+import { getVideoUrl, VideoConfig } from "../lib/video";
 
 interface VideoPlayerProps {
   isActive: boolean;
+  video: VideoConfig;
 }
 
-export function VideoPlayer({ isActive }: VideoPlayerProps) {
+export function VideoPlayer({ isActive, video }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
@@ -21,7 +22,7 @@ export function VideoPlayer({ isActive }: VideoPlayerProps) {
     <div className="gradient-border relative aspect-video w-full overflow-hidden rounded-2xl bg-black">
       <video
         ref={videoRef}
-        src={getVideoUrl()}
+        src={getVideoUrl(video.id)}
         controls={isActive}
         className="h-full w-full object-contain"
       />
@@ -36,10 +37,8 @@ export function VideoPlayer({ isActive }: VideoPlayerProps) {
                 <path d="M8 5v14l11-7z" />
               </svg>
             </div>
-            <p className="text-xl font-semibold text-white">Ready to Stream</p>
-            <p className="mt-2 text-sm text-zinc-400">
-              Deposit USDC and start a session to begin watching
-            </p>
+            <p className="text-xl font-semibold text-white">{video.title}</p>
+            <p className="mt-2 text-sm text-zinc-400">{video.description}</p>
           </div>
         </div>
       )}
