@@ -2,14 +2,10 @@
 
 [Homepage][homepage] • [GitHub][github]
 
-[English (Default)](README.md) • [Bahasa Indonesia](docs/README_ID.md) • [Español](docs/README_ES.md) • [فارسی](docs/README_FA.md) • [中文](docs/README_ZH.md)
+[English (Default)](README.md) • [Bahasa Indonesia](docs/README_ID.md) • [Deutsch](docs/README_DE.md) • [Español](docs/README_ES.md) • [فارسی](docs/README_FA.md) • [Français](docs/README_FR.md) • [日本語](docs/README_JA.md) • [Português](docs/README_PT.md) • [Русский](docs/README_RU.md) • [中文](docs/README_ZH.md)
 
 [homepage]: http://localhost:3000
 [github]: https://github.com/yourusername/esprowstream
-
-<p align="center">
-  <img src="public/logo.png" alt="EsprowStream Logo" width="150" height="150"/>
-</p>
 
 EsprowStream is an innovative Web3 video streaming application that allows users to watch paid videos using USDC with a secure escrow mechanism. Built with Next.js, wagmi, and smart contracts on the Sepolia network.
 
